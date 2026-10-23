@@ -5,27 +5,44 @@ import '../core/sleep_engine_constants.dart';
 
 class HardwareVolumeService {
   final VolumeController _controller = VolumeController.instance;
+  static double _fallbackVolume = SleepEngineConstants.requiredHardwareVolumeFraction;
+  StreamController<double>? _volumeStreamController;
 
   /// Returns current system volume in range [0.0, 1.0].
   Future<double> getVolume() async {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         return await _controller.getVolume();
+      } else if (Platform.isMacOS) {
+        final result = await Process.run('osascript', ['-e', 'output volume of (get volume settings)']);
+        if (result.exitCode == 0) {
+          final intVal = int.tryParse(result.stdout.toString().trim());
+          if (intVal != null) {
+            _fallbackVolume = intVal / 100.0;
+            return _fallbackVolume;
+          }
+        }
       }
-      return SleepEngineConstants.requiredHardwareVolumeFraction;
+      return _fallbackVolume;
     } catch (_) {
-      return SleepEngineConstants.requiredHardwareVolumeFraction;
+      return _fallbackVolume;
     }
   }
 
   /// Sets system media volume to given value in range [0.0, 1.0].
   Future<void> setVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0);
+    _fallbackVolume = clamped;
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         _controller.showSystemUI = false;
-        await _controller.setVolume(volume.clamp(0.0, 1.0));
+        await _controller.setVolume(clamped);
+      } else if (Platform.isMacOS) {
+        final intVal = (clamped * 100).round();
+        await Process.run('osascript', ['-e', 'set volume output volume $intVal']);
       }
     } catch (_) {}
+    _volumeStreamController?.add(_fallbackVolume);
   }
 
   /// Sets system media volume to target 70% fraction.
@@ -47,14 +64,18 @@ class HardwareVolumeService {
         return _controller.addListener(onVolume, fetchInitialVolume: true);
       }
     } catch (_) {}
-    return null;
+    _volumeStreamController ??= StreamController<double>.broadcast();
+    return _volumeStreamController!.stream.listen(onVolume);
   }
 
   /// Cancels listening.
   Future<void> removeListener() async {
     try {
-      await _controller.removeListener();
+      if (Platform.isAndroid || Platform.isIOS) {
+        await _controller.removeListener();
+      }
     } catch (_) {}
+    await _volumeStreamController?.close();
+    _volumeStreamController = null;
   }
 }
-

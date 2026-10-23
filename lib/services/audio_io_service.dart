@@ -35,6 +35,15 @@ abstract class AudioHardwareService {
 
   Future<void> stopMicrophone();
 
+  Future<void> startCalibrationTone({
+    required double digitalGain,
+    int sampleRate = SleepEngineConstants.defaultSpeakerSampleRateHz,
+  });
+
+  void updateCalibrationGain(double newGain);
+
+  Future<void> stopCalibrationTone();
+
   Future<void> dispose();
 }
 
@@ -176,6 +185,7 @@ class DefaultAudioHardwareService implements AudioHardwareService {
   }
 
   /// Starts continuous pink noise test tone for the 30 dBA Speaker Calibration Card.
+  @override
   Future<void> startCalibrationTone({
     required double digitalGain,
     int sampleRate = SleepEngineConstants.defaultSpeakerSampleRateHz,
@@ -207,10 +217,12 @@ class DefaultAudioHardwareService implements AudioHardwareService {
     );
   }
 
+  @override
   void updateCalibrationGain(double newGain) {
     _calibrationGain = newGain;
   }
 
+  @override
   Future<void> stopCalibrationTone() async {
     _calibrationTimer?.cancel();
     _calibrationTimer = null;

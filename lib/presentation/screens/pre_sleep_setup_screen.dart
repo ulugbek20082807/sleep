@@ -7,9 +7,12 @@ import '../../logic/active_sleep_bloc/active_sleep_bloc.dart';
 import '../../logic/active_sleep_bloc/active_sleep_event.dart';
 import '../../logic/pre_sleep_setup_cubit/pre_sleep_setup_cubit.dart';
 import '../../logic/pre_sleep_setup_cubit/pre_sleep_setup_state.dart';
+import '../../logic/profile_bloc/profile_bloc.dart';
+import '../../logic/profile_bloc/profile_event.dart';
 import '../../services/hardware_volume_service.dart';
 import '../../services/permission_gatekeeper_service.dart';
 import '../widgets/pre_flight_permission_dialogs.dart';
+import '../widgets/sound_calibration_card.dart';
 import '../widgets/wake_health_indicator_bar.dart';
 import 'active_sleep_tracking_screen.dart';
 
@@ -29,6 +32,13 @@ class PreSleepSetupScreen extends StatefulWidget {
 
 class _PreSleepSetupScreenState extends State<PreSleepSetupScreen> {
   final HardwareVolumeService _volumeService = HardwareVolumeService();
+  late UserProfileModel _currentUserProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUserProfile = widget.userProfileModel;
+  }
 
   Future<void> _startSleepSession(PreSleepSetupState setupState) async {
     // -------------------------------------------------------------------------
@@ -86,12 +96,14 @@ class _PreSleepSetupScreenState extends State<PreSleepSetupScreen> {
           ),
         );
 
-    Navigator.of(context).pushReplacement(
+    // Navigate to active tracking, keeping MainShellScreen directly under it in back stack
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => ActiveSleepTrackingScreen(
           activeProfile: widget.activeProfile,
         ),
       ),
+      (route) => route.isFirst,
     );
   }
 
@@ -198,9 +210,30 @@ class _PreSleepSetupScreenState extends State<PreSleepSetupScreen> {
                 evaluation: state.evaluation,
                 onSnapToIdealTime: () => cubit.snapToIdealWakeTime(),
               ),
+              const SizedBox(height: 16),
+
+              // 3. Sound Calibration Card (Universally accessible before sleep session)
+              SoundCalibrationCard(
+                initialGain: _currentUserProfile.calibrated30dBaAmplitude,
+                onGainChanged: (newGain) {
+                  _currentUserProfile = _currentUserProfile.copyWith(
+                    calibrated30dBaAmplitude: newGain,
+                  );
+                  context.read<ProfileBloc>().add(
+                        EditProfileEvent(
+                          meta: widget.activeProfile,
+                          updatedUserProfile: _currentUserProfile,
+                        ),
+                      );
+                },
+                volumeService: _volumeService,
+                customSubtitle:
+                    'Calibrate your pillow sound level for tonight.\n'
+                    'Ensure device volume is set to 70% so procedural pink noise remains at optimal 30–44 dBA.',
+              ),
               const SizedBox(height: 20),
 
-              // 3. Physical State Selector
+              // 4. Physical State Selector
               Text(
                 'Today’s Physical State',
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -248,7 +281,7 @@ class _PreSleepSetupScreenState extends State<PreSleepSetupScreen> {
               ),
               const SizedBox(height: 20),
 
-              // 3. Sleep Goal Preset
+              // 5. Sleep Goal Preset
               Text(
                 'Sleep Goal Preset',
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -297,7 +330,7 @@ class _PreSleepSetupScreenState extends State<PreSleepSetupScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 4. Analysis Mode Switch
+              // 6. Analysis Mode Switch
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -399,4 +432,3 @@ class _PresetCard extends StatelessWidget {
     );
   }
 }
-

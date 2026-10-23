@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../logic/active_sleep_bloc/active_sleep_bloc.dart';
+import '../logic/active_sleep_bloc/active_sleep_state.dart';
 import '../logic/profile_bloc/profile_bloc.dart';
 import '../logic/profile_bloc/profile_state.dart';
+import 'screens/active_sleep_tracking_screen.dart';
 import 'screens/create_edit_profile_screen.dart';
 import 'screens/main_shell_screen.dart';
 
@@ -16,8 +19,17 @@ class AppRouter extends StatelessWidget {
           // Zero profiles registered: force user to create first profile
           return const CreateEditProfileScreen(isFirstProfile: true);
         } else if (state is ProfileLoaded) {
-          // Profile exists: open default active profile in main shell
-          return const MainShellScreen();
+          // Check if an active overnight sleep session is already running
+          return BlocBuilder<ActiveSleepBloc, ActiveSleepState>(
+            builder: (context, activeSleepState) {
+              if (activeSleepState is ActiveSleepRunning) {
+                return ActiveSleepTrackingScreen(
+                  activeProfile: state.activeProfile,
+                );
+              }
+              return const MainShellScreen();
+            },
+          );
         } else if (state is ProfileError) {
           return Scaffold(
             body: Center(
@@ -54,4 +66,3 @@ class AppRouter extends StatelessWidget {
     );
   }
 }
-

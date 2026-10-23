@@ -102,10 +102,11 @@ class PreFlightPermissionDialogs {
   /// Step 2.3: Reactive 70% Hardware Speaker Volume Check (Auto-Proceed)
   static Future<bool> showReactiveVolumeDialog(
     BuildContext context,
-    HardwareVolumeService volumeService,
-  ) async {
+    HardwareVolumeService volumeService, {
+    bool forcePrompt = false,
+  }) async {
     final double initialVol = await volumeService.getVolume();
-    if (volumeService.isVolumeOptimal(initialVol)) {
+    if (!forcePrompt && volumeService.isVolumeOptimal(initialVol)) {
       return true;
     }
 
@@ -115,7 +116,10 @@ class PreFlightPermissionDialogs {
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        return _ReactiveVolumeDialogWidget(volumeService: volumeService);
+        return _ReactiveVolumeDialogWidget(
+          volumeService: volumeService,
+          forcePrompt: forcePrompt,
+        );
       },
     );
     return result ?? false;
@@ -124,8 +128,12 @@ class PreFlightPermissionDialogs {
 
 class _ReactiveVolumeDialogWidget extends StatefulWidget {
   final HardwareVolumeService volumeService;
+  final bool forcePrompt;
 
-  const _ReactiveVolumeDialogWidget({required this.volumeService});
+  const _ReactiveVolumeDialogWidget({
+    required this.volumeService,
+    this.forcePrompt = false,
+  });
 
   @override
   State<_ReactiveVolumeDialogWidget> createState() =>
@@ -136,6 +144,8 @@ class _ReactiveVolumeDialogWidgetState
     extends State<_ReactiveVolumeDialogWidget> {
   double _currentVolume = 0.5;
   StreamSubscription<double>? _sub;
+  bool _dismissed = false;
+  Timer? _autoProceedTimer;
 
   @override
   void initState() {
@@ -145,30 +155,45 @@ class _ReactiveVolumeDialogWidgetState
 
   Future<void> _initVolume() async {
     final vol = await widget.volumeService.getVolume();
-    if (mounted) {
+    if (mounted && !_dismissed) {
       setState(() => _currentVolume = vol);
-      _checkAutoProceed(vol);
+      if (!widget.forcePrompt) {
+        _checkAutoProceed(vol);
+      }
     }
 
     _sub = widget.volumeService.listenToVolume((newVol) {
-      if (!mounted) return;
+      if (!mounted || _dismissed) return;
       setState(() => _currentVolume = newVol);
       _checkAutoProceed(newVol);
     });
   }
 
   void _checkAutoProceed(double vol) {
+    if (_dismissed) return;
     if (widget.volumeService.isVolumeOptimal(vol)) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop(true);
+      _autoProceedTimer?.cancel();
+      _autoProceedTimer = Timer(const Duration(milliseconds: 350), () {
+        if (mounted && !_dismissed) {
+          _dismiss(true);
         }
       });
     }
   }
 
+  void _dismiss(bool result) {
+    if (_dismissed) return;
+    _dismissed = true;
+    _autoProceedTimer?.cancel();
+    _autoProceedTimer = null;
+    if (mounted) {
+      Navigator.of(context).pop(result);
+    }
+  }
+
   @override
   void dispose() {
+    _autoProceedTimer?.cancel();
     _sub?.cancel();
     super.dispose();
   }
@@ -189,8 +214,8 @@ class _ReactiveVolumeDialogWidgetState
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'For scientifically calibrated decibel levels (34–44 dBA), your phone media volume must be set to 70% (±5%).\n\n'
-            'Adjust using your volume buttons or tap below to set automatically.',
+            'For scientifically calibrated decibel levels (30–44 dBA), your phone or device media volume must be set to 70% (±5%).\n\n'
+            'Adjust using your volume buttons, slider below, or tap automatic setup.',
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
@@ -219,14 +244,25 @@ class _ReactiveVolumeDialogWidgetState
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
             ),
           ),
-          const SizedBox(height: 16),
+          Slider(
+            value: _currentVolume.clamp(0.0, 1.0),
+            min: 0.0,
+            max: 1.0,
+            divisions: 20,
+            onChanged: (val) async {
+              setState(() => _currentVolume = val);
+              await widget.volumeService.setVolume(val);
+              _checkAutoProceed(val);
+            },
+          ),
+          const SizedBox(height: 8),
           FilledButton.tonalIcon(
             icon: const Icon(Icons.auto_fix_high),
             label: const Text('Set to 70% Automatically'),
             onPressed: () async {
               await widget.volumeService.setTargetVolume();
               final v = await widget.volumeService.getVolume();
-              if (mounted) {
+              if (mounted && !_dismissed) {
                 setState(() => _currentVolume = v);
                 _checkAutoProceed(v);
               }
@@ -236,11 +272,14 @@ class _ReactiveVolumeDialogWidgetState
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => _dismiss(false),
           child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => _dismiss(true),
+          child: const Text('Confirm 70% Volume'),
         ),
       ],
     );
   }
 }
-

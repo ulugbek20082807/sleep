@@ -16,9 +16,12 @@ import 'package:sleep/logic/profile_bloc/profile_event.dart';
 import 'package:sleep/logic/profile_bloc/profile_state.dart';
 import 'package:sleep/logic/sleep_history_cubit/sleep_history_cubit.dart';
 import 'package:sleep/presentation/screens/create_edit_profile_screen.dart';
+import 'package:sleep/presentation/screens/main_shell_screen.dart';
 import 'package:sleep/presentation/screens/scientific_profile_data_screen.dart';
+import 'package:sleep/presentation/screens/switch_profiles_screen.dart';
 import 'package:sleep/presentation/widgets/hold_to_stop_button.dart';
 import 'package:sleep/presentation/widgets/profile_avatar_menu_button.dart';
+import 'package:sleep/presentation/widgets/sound_calibration_card.dart';
 import 'package:sleep/presentation/widgets/wake_health_indicator_bar.dart';
 import 'package:sleep/services/audio_io_service.dart';
 import 'package:sleep/services/sleep_foreground_service.dart';
@@ -610,6 +613,216 @@ void main() {
       await tester.runAsync(() async {
         await profileBloc.close();
         await historyCubit.close();
+      });
+    });
+
+    testWidgets(
+        'SoundCalibrationCard renders essential badge, adjusts slider, and toggles test tone and mic check',
+        (tester) async {
+      double currentGain = 0.008;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SoundCalibrationCard(
+              initialGain: currentGain,
+              onGainChanged: (val) => currentGain = val,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Quiet-Room 30 dBA Calibration'), findsOneWidget);
+      expect(find.text('Essential'), findsOneWidget);
+      expect(find.text('Gain: 0.0080'), findsOneWidget);
+      expect(find.text('~30.0 dBA Target'), findsOneWidget);
+      expect(find.text('Test Calibration Tone'), findsOneWidget);
+      expect(find.text('Room Acoustic Check'), findsOneWidget);
+
+      // Toggle calibration tone on/off
+      await tester.tap(find.text('Test Calibration Tone'));
+      await tester.pump();
+      expect(find.text('Stop Test'), findsOneWidget);
+
+      await tester.tap(find.text('Stop Test'));
+      await tester.pump();
+      expect(find.text('Test Calibration Tone'), findsOneWidget);
+
+      // Toggle room acoustic mic check
+      expect(find.text('Check Mic'), findsOneWidget);
+      await tester.tap(find.text('Check Mic'));
+      await tester.pump();
+      expect(find.text('Stop'), findsOneWidget);
+      expect(find.text('Noise Floor'), findsOneWidget);
+    });
+
+    testWidgets(
+        'MainShellScreen and ActiveSleepBanner reflect running session and transform FAB',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storageAdapter = SharedPrefsSleepAdapter(prefs);
+      final unifier = SleepEngineUnifier(storageAdapter: storageAdapter);
+      final repo = ProfileRepository(prefs);
+      final historyRepo = SleepHistoryRepository(prefs);
+      final audioService = DefaultAudioHardwareService();
+      final backgroundService = FlutterForegroundTaskBackgroundService();
+
+      final profileBloc = ProfileBloc(repository: repo, unifier: unifier);
+      final historyCubit = SleepHistoryCubit(repository: historyRepo);
+      final activeSleepBloc = ActiveSleepBloc(
+        unifier: unifier,
+        sleepHistoryRepository: historyRepo,
+        audioHardwareService: audioService,
+        backgroundService: backgroundService,
+      );
+
+      // Create initial profile
+      final survey = OnboardingSurveyInput(
+        heightCm: 175.0,
+        weightKg: 70.0,
+        ageYears: 20,
+        sex: BiologicalSex.otherOrUnspecified,
+        habitualBedtimeMinutesFromMidnight: 1410,
+        habitualWakeMinutesFromMidnight: 450,
+      );
+      profileBloc.add(CreateProfileEvent(
+        displayName: 'Active Sleeper',
+        avatarPath: null,
+        survey: survey,
+      ));
+
+      await tester.pumpWidget(
+        MultiBlocProvider(
+          providers: [
+            BlocProvider.value(value: profileBloc),
+            BlocProvider.value(value: historyCubit),
+            BlocProvider.value(value: activeSleepBloc),
+          ],
+          child: const MaterialApp(
+            home: MainShellScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('Sleep History'), findsOneWidget);
+      // Initially, no sleep session is active: FAB shows "Start"
+      expect(find.text('Start'), findsOneWidget);
+      expect(find.text('Sleep Tracking Active'), findsNothing);
+
+      // Start an active overnight session
+      final now = DateTime.now();
+      activeSleepBloc.add(StartSleepSessionEvent(
+        profileId: 'test-profile-active',
+        sleepStartTime: now,
+        targetWakeTime: now.add(const Duration(hours: 8)),
+        physicalState: PreSleepPhysicalState.normalBaseline,
+        preset: SleepPresetType.basicBalancedSleep,
+        enableAnalysisMode: true,
+        wakeHealthZoneAtStart: WakeTimeHealthZone.greenOptimal,
+      ));
+
+      await tester.pumpAndSettle();
+
+      // Once active: Banner appears and FAB transforms into "Session"
+      expect(find.text('Sleep Tracking Active'), findsOneWidget);
+      expect(find.text('Session'), findsOneWidget);
+      expect(find.text('Active Session in Progress'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() async {
+        await profileBloc.close();
+        await historyCubit.close();
+        await activeSleepBloc.close();
+      });
+    });
+
+    testWidgets(
+        'SwitchProfilesScreen blocks deletion of profile currently sleeping',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storageAdapter = SharedPrefsSleepAdapter(prefs);
+      final unifier = SleepEngineUnifier(storageAdapter: storageAdapter);
+      final repo = ProfileRepository(prefs);
+      final historyRepo = SleepHistoryRepository(prefs);
+      final audioService = DefaultAudioHardwareService();
+      final backgroundService = FlutterForegroundTaskBackgroundService();
+
+      final profileBloc = ProfileBloc(repository: repo, unifier: unifier);
+      final historyCubit = SleepHistoryCubit(repository: historyRepo);
+      final activeSleepBloc = ActiveSleepBloc(
+        unifier: unifier,
+        sleepHistoryRepository: historyRepo,
+        audioHardwareService: audioService,
+        backgroundService: backgroundService,
+      );
+
+      final survey = OnboardingSurveyInput(
+        heightCm: 175.0,
+        weightKg: 70.0,
+        ageYears: 25,
+        sex: BiologicalSex.male,
+        habitualBedtimeMinutesFromMidnight: 1410,
+        habitualWakeMinutesFromMidnight: 450,
+      );
+      profileBloc.add(CreateProfileEvent(
+        displayName: 'Protected Sleeper',
+        avatarPath: null,
+        survey: survey,
+      ));
+
+      await tester.pumpWidget(
+        RepositoryProvider<ProfileRepository>.value(
+          value: repo,
+          child: MultiBlocProvider(
+            providers: [
+              BlocProvider.value(value: profileBloc),
+              BlocProvider.value(value: historyCubit),
+              BlocProvider.value(value: activeSleepBloc),
+            ],
+            child: const MaterialApp(
+              home: SwitchProfilesScreen(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('Protected Sleeper'), findsOneWidget);
+
+      final profileState = profileBloc.state as ProfileLoaded;
+      final activeId = profileState.activeProfile.id;
+
+      // Start active sleep on this profile
+      final now = DateTime.now();
+      activeSleepBloc.add(StartSleepSessionEvent(
+        profileId: activeId,
+        sleepStartTime: now,
+        targetWakeTime: now.add(const Duration(hours: 8)),
+        physicalState: PreSleepPhysicalState.normalBaseline,
+        preset: SleepPresetType.basicBalancedSleep,
+        enableAnalysisMode: false,
+        wakeHealthZoneAtStart: WakeTimeHealthZone.greenOptimal,
+      ));
+
+      await tester.pumpAndSettle();
+
+      // Attempt to tap delete profile button
+      final deleteBtn = find.byIcon(Icons.delete_outline);
+      expect(deleteBtn, findsOneWidget);
+      await tester.tap(deleteBtn);
+      await tester.pumpAndSettle();
+
+      // Verify that blocking dialog appears protecting active sleeping profile
+      expect(find.text('Cannot Delete Sleeping Profile'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() async {
+        await profileBloc.close();
+        await historyCubit.close();
+        await activeSleepBloc.close();
       });
     });
   });

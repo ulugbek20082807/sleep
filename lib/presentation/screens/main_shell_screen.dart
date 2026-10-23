@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/sleep_core_engine.dart';
 import '../../data/models/app_user_profile_meta.dart';
+import '../../logic/active_sleep_bloc/active_sleep_bloc.dart';
+import '../../logic/active_sleep_bloc/active_sleep_state.dart';
 import '../../logic/pre_sleep_setup_cubit/pre_sleep_setup_cubit.dart';
 import '../../logic/profile_bloc/profile_bloc.dart';
 import '../../logic/profile_bloc/profile_event.dart';
 import '../../logic/profile_bloc/profile_state.dart';
 import '../../logic/sleep_history_cubit/sleep_history_cubit.dart';
 import '../../logic/sleep_history_cubit/sleep_history_state.dart';
+import '../widgets/active_sleep_banner.dart';
 import '../widgets/profile_avatar_menu_button.dart';
 import '../widgets/sleep_history_card.dart';
+import 'active_sleep_tracking_screen.dart';
 import 'create_edit_profile_screen.dart';
 import 'pre_sleep_setup_screen.dart';
 import 'scientific_profile_data_screen.dart';
@@ -131,35 +135,98 @@ class _MainShellScreenState extends State<MainShellScreen> {
               ),
             ],
           ),
-          body: _selectedTab == 0
-              ? _HistoryTab(
-                  profileId: activeProfile.id,
-                  onStartTapped: () =>
-                      _navigateToSetup(context, activeProfile, userProfile),
-                )
-              : _SettingsTab(
-                  meta: activeProfile,
-                  profile: userProfile,
-                ),
+          body: Column(
+            children: [
+              ActiveSleepBanner(activeProfile: activeProfile),
+              Expanded(
+                child: _selectedTab == 0
+                    ? _HistoryTab(
+                        profileId: activeProfile.id,
+                        activeProfile: activeProfile,
+                        onStartTapped: () =>
+                            _navigateToSetup(context, activeProfile, userProfile),
+                      )
+                    : _SettingsTab(
+                        meta: activeProfile,
+                        profile: userProfile,
+                      ),
+              ),
+            ],
+          ),
           floatingActionButtonLocation:
               FloatingActionButtonLocation.centerDocked,
-          floatingActionButton: FloatingActionButton.large(
-            shape: const CircleBorder(),
-            elevation: 4,
-            tooltip: 'Start Sleep',
-            onPressed: () =>
-                _navigateToSetup(context, activeProfile, userProfile),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bedtime, size: 36),
-                SizedBox(height: 2),
-                Text(
-                  'Start',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
+          floatingActionButton: Builder(
+            builder: (context) {
+              ActiveSleepBloc? activeSleepBloc;
+              try {
+                activeSleepBloc = context.read<ActiveSleepBloc>();
+              } catch (_) {
+                activeSleepBloc = null;
+              }
+
+              if (activeSleepBloc == null) {
+                return FloatingActionButton.large(
+                  shape: const CircleBorder(),
+                  elevation: 4,
+                  tooltip: 'Start Sleep',
+                  onPressed: () =>
+                      _navigateToSetup(context, activeProfile, userProfile),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bedtime, size: 36),
+                      SizedBox(height: 2),
+                      Text(
+                        'Start',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return BlocBuilder<ActiveSleepBloc, ActiveSleepState>(
+                bloc: activeSleepBloc,
+                builder: (context, sleepState) {
+                  final isRunning = sleepState is ActiveSleepRunning;
+
+                  return FloatingActionButton.large(
+                    shape: const CircleBorder(),
+                    elevation: 4,
+                    tooltip: isRunning
+                        ? 'Active Sleep Session Running — Return to Session'
+                        : 'Start Sleep',
+                    backgroundColor: isRunning ? theme.colorScheme.primary : null,
+                    foregroundColor: isRunning ? theme.colorScheme.onPrimary : null,
+                    onPressed: () {
+                      if (isRunning) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ActiveSleepTrackingScreen(
+                              activeProfile: activeProfile,
+                            ),
+                          ),
+                        );
+                      } else {
+                        _navigateToSetup(context, activeProfile, userProfile);
+                      }
+                    },
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(isRunning ? Icons.hotel : Icons.bedtime, size: 36),
+                        const SizedBox(height: 2),
+                        Text(
+                          isRunning ? 'Session' : 'Start',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
           ),
           bottomNavigationBar: BottomAppBar(
             shape: const CircularNotchedRectangle(),
@@ -195,16 +262,25 @@ class _MainShellScreenState extends State<MainShellScreen> {
 
 class _HistoryTab extends StatelessWidget {
   final String profileId;
+  final AppUserProfileMeta? activeProfile;
   final VoidCallback onStartTapped;
 
   const _HistoryTab({
     required this.profileId,
+    this.activeProfile,
     required this.onStartTapped,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    ActiveSleepState? activeSleepState;
+    try {
+      activeSleepState = context.watch<ActiveSleepBloc>().state;
+    } catch (_) {
+      activeSleepState = null;
+    }
+    final isRunning = activeSleepState is ActiveSleepRunning;
 
     return BlocBuilder<SleepHistoryCubit, SleepHistoryState>(
       builder: (context, state) {
@@ -212,7 +288,7 @@ class _HistoryTab extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (state.records.isEmpty) {
+        if (state.records.isEmpty && !isRunning) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -251,11 +327,52 @@ class _HistoryTab extends StatelessWidget {
           );
         }
 
+        final int totalItems = state.records.length + (isRunning ? 1 : 0);
+
         return ListView.builder(
           padding: const EdgeInsets.only(top: 8, bottom: 88),
-          itemCount: state.records.length,
+          itemCount: totalItems,
           itemBuilder: (context, index) {
-            final record = state.records[index];
+            if (isRunning && index == 0) {
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    Icons.nightlight_round,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: const Text(
+                    'Active Session in Progress',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(
+                    'Ultradian cycle tracking & acoustics active',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () {
+                    if (activeProfile != null) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ActiveSleepTrackingScreen(
+                            activeProfile: activeProfile!,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              );
+            }
+
+            final recordIndex = isRunning ? index - 1 : index;
+            final record = state.records[recordIndex];
             return SleepHistoryCard(
               record: record,
               onTap: () {

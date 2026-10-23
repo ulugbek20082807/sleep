@@ -10,6 +10,7 @@ import '../../logic/profile_bloc/profile_state.dart';
 import '../../services/audio_io_service.dart';
 import '../../services/hardware_volume_service.dart';
 import '../widgets/profile_avatar_menu_button.dart';
+import '../widgets/sound_calibration_card.dart';
 import 'main_shell_screen.dart';
 
 class CreateEditProfileScreen extends StatefulWidget {
@@ -54,7 +55,6 @@ class _CreateEditProfileScreenState extends State<CreateEditProfileScreen> {
 
   // Speaker Calibration State
   double _calibrationGain = 0.008;
-  bool _isCalibrating = false;
   bool _isSubmitting = false;
   final DefaultAudioHardwareService _audioService =
       DefaultAudioHardwareService();
@@ -150,27 +150,11 @@ class _CreateEditProfileScreenState extends State<CreateEditProfileScreen> {
     );
   }
 
-  Future<void> _toggleCalibration() async {
-    if (_isCalibrating) {
-      await _audioService.stopCalibrationTone();
-      if (mounted) setState(() => _isCalibrating = false);
-    } else {
-      await _volumeService.setTargetVolume();
-      await _audioService.startCalibrationTone(
-        digitalGain: _calibrationGain,
-      );
-      if (mounted) setState(() => _isCalibrating = true);
-    }
-  }
-
   void _saveProfile() {
     if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
 
-    if (_isCalibrating) {
-      _audioService.stopCalibrationTone();
-      _isCalibrating = false;
-    }
+    _audioService.stopCalibrationTone();
 
     setState(() => _isSubmitting = true);
 
@@ -273,7 +257,7 @@ class _CreateEditProfileScreenState extends State<CreateEditProfileScreen> {
           body: Form(
             key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
           children: [
             // Avatar Section
             Center(
@@ -674,73 +658,13 @@ class _CreateEditProfileScreenState extends State<CreateEditProfileScreen> {
             const SizedBox(height: 24),
 
             // Quiet-Room 30 dBA Speaker Calibration Card
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
-              ),
-              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.speaker_phone,
-                            color: theme.colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Quiet-Room 30 dBA Calibration',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Calibrates your phone speaker so acoustic masking (30–44 dBA) is gentle and never too loud.\n'
-                      'Slide until you can barely hear the soft breeze from your pillow.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        FilledButton.tonalIcon(
-                          icon: Icon(_isCalibrating
-                              ? Icons.stop
-                              : Icons.volume_up),
-                          label: Text(_isCalibrating
-                              ? 'Stop Test'
-                              : 'Test Calibration Tone'),
-                          onPressed: _toggleCalibration,
-                        ),
-                        const Spacer(),
-                        Text(
-                          'Gain: ${_calibrationGain.toStringAsFixed(4)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: _calibrationGain,
-                      min: 0.0001,
-                      max: 0.25,
-                      divisions: 250,
-                      onChanged: (val) {
-                        setState(() => _calibrationGain = val);
-                        if (_isCalibrating) {
-                          _audioService.updateCalibrationGain(val);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
+            SoundCalibrationCard(
+              initialGain: _calibrationGain,
+              onGainChanged: (val) => setState(() => _calibrationGain = val),
+              audioService: _audioService,
+              volumeService: _volumeService,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 12),
 
             // Save Action
             FilledButton.icon(

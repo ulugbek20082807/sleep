@@ -1,8 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../core/sleep_core_engine.dart';
 import '../../data/models/sleep_session_record.dart';
+import '../../logic/profile_bloc/profile_bloc.dart';
+import '../../logic/profile_bloc/profile_state.dart';
+import '../widgets/active_sleep_banner.dart';
 
 class SleepHistoryDetailScreen extends StatelessWidget {
   final SleepSessionRecord record;
@@ -50,10 +54,18 @@ class SleepHistoryDetailScreen extends StatelessWidget {
         centerTitle: false,
         title: const Text('Sleep Session Details'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          // 1. Top Summary Card
+      body: Builder(
+        builder: (context) {
+          final profileState = context.watch<ProfileBloc>().state;
+          final activeProfile =
+              profileState is ProfileLoaded ? profileState.activeProfile : null;
+
+          return ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              if (activeProfile != null)
+                ActiveSleepBanner(activeProfile: activeProfile),
+              // 1. Top Summary Card
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -296,8 +308,10 @@ class SleepHistoryDetailScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
+      );
+    },
+  ),
+);
   }
 }
 

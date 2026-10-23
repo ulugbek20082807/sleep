@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/sleep_core_engine.dart';
 import '../../data/models/app_user_profile_meta.dart';
+import '../widgets/active_sleep_banner.dart';
 
 class ScientificProfileDataScreen extends StatelessWidget {
   final AppUserProfileMeta meta;
@@ -70,6 +71,7 @@ class ScientificProfileDataScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
+          ActiveSleepBanner(activeProfile: meta),
           // Header Card
           Card(
             elevation: 0,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:intl/intl.dart';
 import '../../core/sleep_core_engine.dart';
 import '../../data/models/app_user_profile_meta.dart';
@@ -145,10 +146,11 @@ class ActiveSleepTrackingScreen extends StatelessWidget {
             );
           }
           // Navigate back to history
-          Navigator.of(context).pushReplacement(
+          Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
               builder: (_) => const MainShellScreen(initialTab: 0),
             ),
+            (route) => false,
           );
         }
       },
@@ -170,218 +172,198 @@ class ActiveSleepTrackingScreen extends StatelessWidget {
 
         final stageColor = _getStageColor(context, prediction.predictedStage);
 
-        return Scaffold(
-          backgroundColor: theme.colorScheme.surface,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            title: Text('${activeProfile.displayName} — Overnight Session'),
-            centerTitle: false,
-          ),
-          body: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16.0),
-                    children: [
-                      // 1. Clock & Wake Countdown Header
-                      Card(
-                        elevation: 0,
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: 20,
-                          ),
-                          child: Column(
-                            children: [
-                              Text(
-                                dateStr,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                timeStr,
-                                style: theme.textTheme.headlineLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.alarm,
-                                    size: 16,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Wake at ${DateFormat('HH:mm').format(state.targetWakeTime)} (${_formatCountdown(countdown)} remaining)',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+        return WithForegroundTask(
+          child: Scaffold(
+            backgroundColor: theme.colorScheme.surface,
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Minimize (session continues in background)',
+                onPressed: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => const MainShellScreen(),
                       ),
-                      const SizedBox(height: 16),
-
-                      // 2. Current Sleep Cycle & Stage Card
-                      Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                            color: stageColor.withValues(alpha: 0.5),
-                            width: 1.5,
+                    );
+                  }
+                },
+              ),
+              title: Text('${activeProfile.displayName} — Overnight Session'),
+              centerTitle: false,
+            ),
+            body: SafeArea(
+              child: Column(
+                children: [
+                  // Background Execution Safety Indicator
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Tracking runs in background. You can navigate the app or lock your screen.',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Current Sleep Stage',
-                                    style:
-                                        theme.textTheme.labelLarge?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
+                      ],
+                    ),
+                  ),
+
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(16.0),
+                      children: [
+                        // 1. Clock & Wake Countdown Header
+                        Card(
+                          elevation: 0,
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 16,
+                              horizontal: 20,
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  dateStr,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  timeStr,
+                                  style: theme.textTheme.headlineLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.alarm,
+                                      size: 16,
+                                      color: theme.colorScheme.primary,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: stageColor.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      _formatStage(prediction.predictedStage),
-                                      style: TextStyle(
-                                        color: stageColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Wake at ${DateFormat('HH:mm').format(state.targetWakeTime)} (${_formatCountdown(countdown)} remaining)',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Cycle ${prediction.currentCycleIndex} of ${prediction.optimalTotalCyclesForWakeWindow}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${(prediction.cycleProgressFraction * 100).round()}% Completed',
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: LinearProgressIndicator(
-                                  value: prediction.cycleProgressFraction
-                                      .clamp(0.0, 1.0),
-                                  minHeight: 10,
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(stageColor),
-                                  backgroundColor: theme
-                                      .colorScheme.surfaceContainerHighest,
+                                  ],
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                      // 3. Real-Time Acoustic Engine Telemetry Card
-                      Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                              color: theme.colorScheme.outlineVariant),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.volume_up,
-                                      color: theme.colorScheme.primary),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Procedural Acoustic Engine',
-                                    style:
-                                        theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
+                        // 2. Current Sleep Cycle & Stage Card
+                        Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: stageColor.withValues(alpha: 0.5),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Current Sleep Stage',
+                                      style:
+                                          theme.textTheme.labelLarge?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
                                     ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: stageColor.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        _formatStage(prediction.predictedStage),
+                                        style: TextStyle(
+                                          color: stageColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Cycle ${prediction.currentCycleIndex} of ${prediction.optimalTotalCyclesForWakeWindow}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${(prediction.cycleProgressFraction * 100).round()}% Completed',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: LinearProgressIndicator(
+                                    value: prediction.cycleProgressFraction
+                                        .clamp(0.0, 1.0),
+                                    minHeight: 10,
+                                    valueColor:
+                                        AlwaysStoppedAnimation<Color>(stageColor),
+                                    backgroundColor: theme
+                                        .colorScheme.surfaceContainerHighest,
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
-                                children: [
-                                  _AcousticItem(
-                                    label: 'Volume',
-                                    value:
-                                        '${recipe.targetVolumeDba.toStringAsFixed(1)} dBA',
-                                  ),
-                                  _AcousticItem(
-                                    label: 'Filter Cutoff',
-                                    value:
-                                        '${recipe.lowPassCutoffHz.round()} Hz',
-                                  ),
-                                  _AcousticItem(
-                                    label: 'Warmth (β)',
-                                    value: recipe.spectralSlopeBeta
-                                        .toStringAsFixed(2),
-                                  ),
-                                  _AcousticItem(
-                                    label: 'N3 Pulses',
-                                    value: recipe.enable50msN3Pulses
-                                        ? 'Active'
-                                        : 'Off',
-                                  ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                      // 4. Analysis Mode Status Card (if enabled)
-                      if (state.enableAnalysisMode)
+                        // 3. Real-Time Acoustic Engine Telemetry Card
                         Card(
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -396,48 +378,16 @@ class ActiveSleepTrackingScreen extends StatelessWidget {
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.graphic_eq,
-                                        color: theme.colorScheme.secondary),
+                                    Icon(Icons.volume_up,
+                                        color: theme.colorScheme.primary),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Acoustic Analysis Mode',
+                                      'Procedural Acoustic Engine',
                                       style:
                                           theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    const Spacer(),
-                                    if (state.cycleCalibratedTonight)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.check_circle,
-                                              size: 14,
-                                              color: Colors.green.shade800,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              'Boundary Detected',
-                                              style: TextStyle(
-                                                color: Colors.green.shade800,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
                                   ],
                                 ),
                                 const SizedBox(height: 12),
@@ -446,18 +396,25 @@ class ActiveSleepTrackingScreen extends StatelessWidget {
                                       MainAxisAlignment.spaceAround,
                                   children: [
                                     _AcousticItem(
-                                      label: 'State',
-                                      value: analysis.currentMode.name,
+                                      label: 'Volume',
+                                      value:
+                                          '${recipe.targetVolumeDba.toStringAsFixed(1)} dBA',
                                     ),
                                     _AcousticItem(
-                                      label: 'Room Floor',
+                                      label: 'Filter Cutoff',
                                       value:
-                                          '${analysis.rollingHighFreqFloorDba.toStringAsFixed(1)} dBA',
+                                          '${recipe.lowPassCutoffHz.round()} Hz',
                                     ),
                                     _AcousticItem(
-                                      label: 'Live Mic (>2.5k)',
-                                      value:
-                                          '${analysis.currentHighFreqMicDba.toStringAsFixed(1)} dBA',
+                                      label: 'Warmth (β)',
+                                      value: recipe.spectralSlopeBeta
+                                          .toStringAsFixed(2),
+                                    ),
+                                    _AcousticItem(
+                                      label: 'N3 Pulses',
+                                      value: recipe.enable50msN3Pulses
+                                          ? 'Active'
+                                          : 'Off',
                                     ),
                                   ],
                                 ),
@@ -465,25 +422,113 @@ class ActiveSleepTrackingScreen extends StatelessWidget {
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                ),
+                        const SizedBox(height: 16),
 
-                // 5. Bottom 2-Second Hold-to-Stop Button
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 20,
+                        // 4. Analysis Mode Status Card (if enabled)
+                        if (state.enableAnalysisMode)
+                          Card(
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                  color: theme.colorScheme.outlineVariant),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.graphic_eq,
+                                          color: theme.colorScheme.secondary),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Acoustic Analysis Mode',
+                                        style:
+                                            theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (state.cycleCalibratedTonight)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade100,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check_circle,
+                                                size: 14,
+                                                color: Colors.green.shade800,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Boundary Detected',
+                                                style: TextStyle(
+                                                  color: Colors.green.shade800,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: [
+                                      _AcousticItem(
+                                        label: 'State',
+                                        value: analysis.currentMode.name,
+                                      ),
+                                      _AcousticItem(
+                                        label: 'Room Floor',
+                                        value:
+                                            '${analysis.rollingHighFreqFloorDba.toStringAsFixed(1)} dBA',
+                                      ),
+                                      _AcousticItem(
+                                        label: 'Live Mic (>2.5k)',
+                                        value:
+                                            '${analysis.currentHighFreqMicDba.toStringAsFixed(1)} dBA',
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  child: HoldToStopButton(
-                    onStopConfirmed: () {
-                      context
-                          .read<ActiveSleepBloc>()
-                          .add(const StopSleepSessionEvent());
-                    },
+
+                  // 5. Bottom 2-Second Hold-to-Stop Button
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 20,
+                    ),
+                    child: HoldToStopButton(
+                      onStopConfirmed: () {
+                        context
+                            .read<ActiveSleepBloc>()
+                            .add(const StopSleepSessionEvent());
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -520,4 +565,3 @@ class _AcousticItem extends StatelessWidget {
     );
   }
 }
-

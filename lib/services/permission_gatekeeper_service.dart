@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'audio_io_service.dart';
 
 class InitialPermissionsResult {
   final bool notificationGranted;
@@ -73,6 +74,7 @@ class PermissionGatekeeperService {
 
   /// Checks if microphone permission is granted.
   static Future<bool> isMicrophoneGranted() async {
+    if (DefaultAudioHardwareService.disableNativeAudioForTesting) return true;
     if (Platform.isWindows || Platform.isLinux) return true;
     try {
       return await Permission.microphone.isGranted;
@@ -83,6 +85,7 @@ class PermissionGatekeeperService {
 
   /// Requests microphone permission.
   static Future<bool> requestMicrophonePermission() async {
+    if (DefaultAudioHardwareService.disableNativeAudioForTesting) return true;
     if (Platform.isWindows || Platform.isLinux) return true;
     try {
       final status = await Permission.microphone.request();

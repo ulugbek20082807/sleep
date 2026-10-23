@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 /// Clean interface for background execution and notification updates.
 abstract class BackgroundExecutionService {
   Future<void> init();
+  Stream<String> get onNotificationClick;
   Future<void> startBackgroundSession({
     required String title,
     required String text,
@@ -15,9 +17,35 @@ abstract class BackgroundExecutionService {
   Future<void> stopBackgroundSession();
 }
 
+@pragma('vm:entry-point')
+void sleepTaskCallback() {
+  FlutterForegroundTask.setTaskHandler(SleepForegroundTaskHandler());
+}
+
+class SleepForegroundTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {}
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+
+  @override
+  void onNotificationPressed() {
+    FlutterForegroundTask.sendDataToMain('NAVIGATE_TO_ACTIVE_SLEEP');
+  }
+}
+
 class FlutterForegroundTaskBackgroundService
     implements BackgroundExecutionService {
   bool _initialized = false;
+  final StreamController<String> _notificationEventController =
+      StreamController<String>.broadcast();
+
+  @override
+  Stream<String> get onNotificationClick => _notificationEventController.stream;
 
   @override
   Future<void> init() async {
@@ -29,6 +57,13 @@ class FlutterForegroundTaskBackgroundService
     }
 
     try {
+      FlutterForegroundTask.initCommunicationPort();
+      FlutterForegroundTask.addTaskDataCallback((data) {
+        if (data == 'NAVIGATE_TO_ACTIVE_SLEEP') {
+          _notificationEventController.add('NAVIGATE_TO_ACTIVE_SLEEP');
+        }
+      });
+
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
           channelId: 'sleep_perfecter_foreground_service',
@@ -69,6 +104,7 @@ class FlutterForegroundTaskBackgroundService
         await FlutterForegroundTask.updateService(
           notificationTitle: title,
           notificationText: text,
+          notificationInitialRoute: '/active_sleep',
         );
         return;
       }
@@ -80,6 +116,8 @@ class FlutterForegroundTaskBackgroundService
         ],
         notificationTitle: title,
         notificationText: text,
+        notificationInitialRoute: '/active_sleep',
+        callback: sleepTaskCallback,
       );
     } catch (_) {}
   }
@@ -96,6 +134,7 @@ class FlutterForegroundTaskBackgroundService
         await FlutterForegroundTask.updateService(
           notificationTitle: title,
           notificationText: text,
+          notificationInitialRoute: '/active_sleep',
         );
       }
     } catch (_) {}
@@ -112,4 +151,3 @@ class FlutterForegroundTaskBackgroundService
     } catch (_) {}
   }
 }
-

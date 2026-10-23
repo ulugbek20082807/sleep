@@ -3,9 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/sleep_core_engine.dart';
 import '../../data/models/app_user_profile_meta.dart';
 import '../../data/repositories/profile_repository.dart';
+import '../../logic/active_sleep_bloc/active_sleep_bloc.dart';
+import '../../logic/active_sleep_bloc/active_sleep_state.dart';
 import '../../logic/profile_bloc/profile_bloc.dart';
 import '../../logic/profile_bloc/profile_event.dart';
 import '../../logic/profile_bloc/profile_state.dart';
+import '../widgets/active_sleep_banner.dart';
 import '../widgets/profile_avatar_menu_button.dart';
 import 'create_edit_profile_screen.dart';
 
@@ -16,6 +19,31 @@ class SwitchProfilesScreen extends StatelessWidget {
     BuildContext context,
     AppUserProfileMeta meta,
   ) {
+    final activeSleepState = context.read<ActiveSleepBloc>().state;
+    if (activeSleepState is ActiveSleepRunning &&
+        activeSleepState.profileId == meta.id) {
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            icon: const Icon(Icons.warning, size: 36),
+            title: const Text('Cannot Delete Sleeping Profile'),
+            content: Text(
+              'Profile "${meta.displayName}" has an active overnight sleep session currently running.\n\n'
+              'Please stop the sleep session before deleting this profile.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) {
@@ -88,10 +116,14 @@ class SwitchProfilesScreen extends StatelessWidget {
             centerTitle: false,
             title: const Text('Switch / Edit Profiles'),
           ),
-          body: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            itemCount: profiles.length,
-            itemBuilder: (context, index) {
+          body: Column(
+            children: [
+              ActiveSleepBanner(activeProfile: state.activeProfile),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: profiles.length,
+                  itemBuilder: (context, index) {
               final meta = profiles[index];
               final isActive = meta.id == activeId;
 
@@ -195,7 +227,10 @@ class SwitchProfilesScreen extends StatelessWidget {
               );
             },
           ),
-          floatingActionButton: FloatingActionButton.extended(
+        ),
+      ],
+    ),
+    floatingActionButton: FloatingActionButton.extended(
             icon: const Icon(Icons.person_add),
             label: const Text('Add Profile'),
             onPressed: () {
